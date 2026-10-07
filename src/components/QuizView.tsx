@@ -14,15 +14,15 @@ interface QuizQuestion {
 const DEFAULT_QUESTIONS: QuizQuestion[] = [
   {
     id: 1,
-    question: 'Why is LangGraph chosen over simple linear chains for this technical interview platform?',
+    question: 'Why is a cyclic state machine architecture chosen over simple linear chains for this technical interview platform?',
     options: [
-      'It supports cyclic state graphs, TypedDict memory persistence, and tool execution loops.',
+      'It supports multi-turn conversational cycles, persistent memory checkpoints, and tool execution loops.',
       'It is written in C++ and runs faster than any other framework.',
       'It only works with static rule-based chatbots.',
       'It replaces the need for any database or checkpointer.'
     ],
     correctIndex: 0,
-    explanation: 'LangGraph allows stateful agent workflows with cyclic loops, tool calling, and persistence via Redis/Postgres checkpointers.',
+    explanation: 'Stateful evaluation workflows allow cyclic loops, tool calling, and persistence via Redis/Postgres checkpointers across turns.',
     phoneticPracticeWord: 'orchestration'
   },
   {
@@ -40,15 +40,15 @@ const DEFAULT_QUESTIONS: QuizQuestion[] = [
   },
   {
     id: 3,
-    question: 'In the RAG pipeline, which technology pair is used for semantic document ingestion and retrieval?',
+    question: 'In the knowledge retrieval pipeline, what is the best practice for semantic document search?',
     options: [
-      'LlamaIndex for chunking + Chroma for vector storage with Gemini Embeddings.',
+      'Hierarchical text chunking with dense vector embeddings and cosine similarity retrieval.',
       'SQLite for full-text search without vectors.',
       'Celery for vector distance calculation.',
       'Alembic for chunking PDF documents.'
     ],
     correctIndex: 0,
-    explanation: 'LlamaIndex handles document ingestion and hierarchical chunking, while ChromaDB persists 768-dimensional Gemini embeddings.',
+    explanation: 'Hierarchical chunking paired with vector similarity preserves contextual semantic meaning for high-accuracy retrieval.',
     phoneticPracticeWord: 'embeddings'
   },
   {
@@ -68,20 +68,24 @@ const DEFAULT_QUESTIONS: QuizQuestion[] = [
 
 const PRESET_JDS = [
   {
-    title: 'Full-Stack AI Software Engineer',
-    requirements: 'React 19, TypeScript, FastAPI, LangGraph, Multi-Model Gemini, PostgreSQL, Docker, Redis caching, System Design for 1M+ requests.'
+    title: 'Full-Stack Software Engineer',
+    requirements: 'React 19, TypeScript, FastAPI, System Design, PostgreSQL, Docker, Redis caching, Concurrency & Scaling for 1M+ requests.'
   },
   {
-    title: 'Python Backend & Async Architect',
-    requirements: 'FastAPI async coroutines, SQLAlchemy 2.0, Alembic migrations, Redis rate limiting, Celery background worker queues, JWT + Argon2 auth.'
+    title: 'UPSC & Civil Services Examination',
+    requirements: 'Indian Constitution, Governance, Public Administration, Federalism, Ethics, Socioeconomic Policies, Prelims and Mains Syllabus.'
   },
   {
-    title: 'AI Agent & RAG Specialist',
-    requirements: 'LangGraph state machines, cyclic graph routing, LlamaIndex vector retrieval, ChromaDB embeddings, DeepEval evaluation metrics.'
+    title: 'AI & Machine Learning Specialist',
+    requirements: 'Deep learning foundations, LLM fine-tuning, loss functions, embedding models, vector retrieval, evaluation metrics, model inference latency.'
   },
   {
-    title: 'Distributed Systems & Cloud Engineer',
-    requirements: 'Horizontal scaling, Nginx load balancing, database read replicas, sharding, Docker Compose multi-container deployments.'
+    title: 'Product Management Leader',
+    requirements: 'Product strategy, prioritization frameworks (RICE/MoSCoW), North Star metrics, cross-functional execution, GTM, user retention analysis.'
+  },
+  {
+    title: 'Cloud DevOps & Infrastructure',
+    requirements: 'Kubernetes orchestration, CI/CD pipelines, terraform IaC, microservice observability, zero-downtime blue-green deployments.'
   }
 ];
 
@@ -287,7 +291,7 @@ export const QuizView: React.FC = () => {
               rows={4}
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste requirements from your job description (e.g. 'Must have experience with FastAPI, Redis caching, LangGraph agent workflows, PostgreSQL, Docker, and handling high concurrent traffic')..."
+              placeholder="Paste requirements from your job description (e.g. 'Must have experience with FastAPI, Redis caching, microservices, PostgreSQL, Docker, and handling high concurrent traffic')..."
               className="w-full text-xs border border-[#e2e8f0] rounded-xl p-2.5 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none bg-[#f8f9ff]"
             />
           </div>
@@ -413,7 +417,7 @@ export const QuizView: React.FC = () => {
           <div className="p-4 rounded-xl bg-[#f8f9ff] border border-[#e2e8f0] max-w-sm mx-auto text-xs text-[#475569]">
             {score === questions.length
               ? 'Outstanding performance! You showed complete command over the technical requirements of this position.'
-              : 'Great work! Review the LangGraph state machine, Redis checkpointers, and RAG ingestion concepts to reinforce your readiness.'}
+              : 'Great work! Review the system architecture, caching patterns, and retrieval concepts to reinforce your readiness.'}
           </div>
 
           <button

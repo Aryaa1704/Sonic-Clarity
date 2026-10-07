@@ -216,9 +216,13 @@ export class SpeechHandler {
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
 
-      let langCode = 'en-US';
+      let langCode = 'en-IN'; // Default to en-IN for optimal Indian accent phonetic modeling
       const l = language.toLowerCase();
-      if (l.includes('hindi') || l.includes('hinglish')) {
+      if (l.includes('us') || l.includes('american')) {
+        langCode = 'en-US';
+      } else if (l.includes('uk') || l.includes('british')) {
+        langCode = 'en-GB';
+      } else if (l.includes('hindi') || l.includes('hinglish')) {
         langCode = 'hi-IN';
       } else if (l.includes('spanish')) {
         langCode = 'es-ES';
@@ -226,21 +230,22 @@ export class SpeechHandler {
 
       recognition.lang = langCode;
 
-      let accumulated = '';
-
       recognition.onresult = (event: any) => {
-        let interimText = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const item = event.results[i];
-          if (item.isFinal) {
-            accumulated += (accumulated ? ' ' : '') + item[0].transcript;
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = 0; i < event.results.length; ++i) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += (finalTranscript ? ' ' : '') + result[0].transcript;
           } else {
-            interimText += item[0].transcript;
+            interimTranscript += (interimTranscript ? ' ' : '') + result[0].transcript;
           }
         }
-        const text = (accumulated + (interimText ? ' ' + interimText : '')).trim();
-        if (text) {
-          onResult(text, !!accumulated);
+
+        const fullText = (finalTranscript + (interimTranscript ? ' ' + interimTranscript : '')).trim();
+        if (fullText) {
+          onResult(fullText, !!finalTranscript);
         }
       };
 

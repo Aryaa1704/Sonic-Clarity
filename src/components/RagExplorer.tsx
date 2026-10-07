@@ -70,10 +70,10 @@ export const RagExplorer: React.FC<RagExplorerProps> = ({ onSelectContextForChat
             </div>
             <div>
               <h2 className="text-lg font-bold text-[#0f2942]">
-                RAG Knowledge Base & ChromaDB Vector Store
+                Domain Knowledge Base & Vector Retrieval
               </h2>
               <p className="text-xs text-[#64748b]">
-                Powered by LlamaIndex document chunking and Gemini 768-dimensional semantic embeddings
+                Powered by semantic document chunking and dense vector similarity indexing
               </p>
             </div>
           </div>
@@ -96,7 +96,7 @@ export const RagExplorer: React.FC<RagExplorerProps> = ({ onSelectContextForChat
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Test semantic similarity search across ingested engineering docs (e.g. 'FastAPI WebSockets', 'LangGraph memory')..."
+              placeholder="Test semantic similarity search across ingested engineering docs (e.g. 'FastAPI WebSockets', 'Redis caching')..."
               className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-10 pr-4 py-2.5 text-[#0f2942] placeholder-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#2563eb]"
             />
           </div>

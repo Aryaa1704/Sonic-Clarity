@@ -60,10 +60,10 @@ export const TranscriptView: React.FC<TranscriptViewProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold tracking-tight">
                     {isAgent
-                      ? 'Sonic Clarity (LangGraph + Gemini)'
+                      ? 'Sonic Clarity (Interview Coach)'
                       : msg.inputMethod === 'voice'
-                      ? 'Learner (Voice Input)'
-                      : 'Learner (Typed Question)'}
+                      ? 'Candidate (Voice Input)'
+                      : 'Candidate (Question)'}
                   </span>
                   <span className="text-[10px] text-[#64748b] font-mono">{msg.timestamp}</span>
                 </div>
@@ -151,7 +151,7 @@ export const TranscriptView: React.FC<TranscriptViewProps> = ({
               <span className="w-2 h-2 rounded-full bg-[#0f2942] animate-bounce delay-300" />
             </div>
             <span className="text-xs font-medium text-[#64748b]">
-              LangGraph Agent routing • Invoking Gemini 3.8 Flash & Deepgram STT...
+              Analyzing question and formulating interview response...
             </span>
           </div>
         </div>

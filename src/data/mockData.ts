@@ -43,17 +43,17 @@ app = FastAPI(title="Voice Pedagogical Engine")
 
 @app.post("/api/v1/voice/turn")
 async def process_voice_turn(turn: VoiceTurnRequest):
-    agent_output = await langgraph_app.ainvoke(turn.dict())
+    agent_output = await agent_pipeline.ainvoke(turn.dict())
     return agent_output`,
     status: 'ACTIVE'
   },
   {
     layer: 'AI Agent',
-    technology: 'LangGraph',
+    technology: 'Stateful Agent Engine',
     kyu: 'Stateful agent + tool calling + workflows',
     category: 'ai',
     role: 'Cyclic stateful graph orchestrating tool execution, conversational memory checkpointers, and conditional edge routing.',
-    codeSnippet: `from langgraph.graph import StateGraph, START, END
+    codeSnippet: `from core.graph import StateGraph, START, END
 from typing import TypedDict
 
 class AgentState(TypedDict):
@@ -63,7 +63,7 @@ class AgentState(TypedDict):
 
 workflow = StateGraph(AgentState)
 workflow.add_node("rag_retrieval", retrieve_knowledge)
-workflow.add_node("agent_reasoning", call_gemini_model)
+workflow.add_node("agent_reasoning", call_reasoning_model)
 workflow.add_edge(START, "rag_retrieval")
 workflow.add_edge("rag_retrieval", "agent_reasoning")
 workflow.add_edge("agent_reasoning", END)
@@ -72,17 +72,15 @@ app = workflow.compile()`,
   },
   {
     layer: 'LLM',
-    technology: 'Gemini API (gemini-3.8-flash)',
-    kyu: 'Strong multilingual capability + easy development',
+    technology: 'Conversational AI Engine',
+    kyu: 'Strong multilingual capability + low latency',
     category: 'ai',
     role: 'Multimodal foundation model providing low-latency reasoning, phonetics analysis, and natural dialogue synthesis.',
-    codeSnippet: `from google import genai
+    codeSnippet: `import { generateContent } from './ai';
 
-ai = genai.Client()
-response = ai.models.generate_content(
-    model='gemini-3.8-flash',
-    contents='Analyze user pronunciation clarity and answer pedagogical question.'
-)`,
+const response = await generateContent({
+    prompt: 'Analyze user pronunciation clarity and answer pedagogical question.'
+});`,
     status: 'ACTIVE'
   },
   {
@@ -134,14 +132,13 @@ index = VectorStoreIndex.from_documents(documents, vector_store=chroma_collectio
   },
   {
     layer: 'Embeddings',
-    technology: 'Gemini Embeddings',
-    kyu: 'Same AI ecosystem, simple integration',
+    technology: 'Dense Vector Embeddings',
+    kyu: 'High-dimensional semantic vectors for fast retrieval',
     category: 'ai',
-    role: '768-dimensional semantic embeddings matching Gemini semantic representations for fast vector distance calculations.',
-    codeSnippet: `from google import genai
-
-embedding = ai.models.embed_content(
-    model="gemini-embedding-2-preview",
+    role: 'Dense semantic embeddings matching domain vocabulary for fast vector distance calculations.',
+    codeSnippet: `from core.embeddings import embed_content
+ 
+embedding = embed_content(
     contents="FastAPI async worker architecture"
 )`,
     status: 'ACTIVE'
@@ -198,7 +195,7 @@ def upgrade() -> None:
     technology: 'Redis',
     kyu: 'Fast state + rate limiting',
     category: 'backend',
-    role: 'In-memory cache for conversational state checkpoints, LangGraph session caching, and token bucket rate limits.',
+    role: 'In-memory cache for conversational state checkpoints, session state caching, and token bucket rate limits.',
     codeSnippet: `import redis.asyncio as redis
 
 # Sliding window rate limit
@@ -372,12 +369,12 @@ export const INITIAL_RAG_DOCUMENTS: RagDocument[] = [
   },
   {
     id: 'doc-02',
-    title: 'LangGraph Stateful Cycles & Checkpointing',
-    content: 'LangGraph introduces cyclic state machines with TypedDict memory. Checkpointers preserve conversational turns and pedagogical state across distributed worker restarts.',
+    title: 'Stateful Cycles & Distributed Checkpointing',
+    content: 'Cyclic state machines with memory checkpointers preserve conversational turns and pedagogical state across distributed worker restarts.',
     category: 'AI Agent',
     chunksCount: 12,
     embeddingScore: 0.91,
-    source: 'ai_specs/langgraph_state_machine.md'
+    source: 'ai_specs/state_machine.md'
   },
   {
     id: 'doc-03',
@@ -390,8 +387,8 @@ export const INITIAL_RAG_DOCUMENTS: RagDocument[] = [
   },
   {
     id: 'doc-04',
-    title: 'ChromaDB Vector Retrieval & Gemini Embeddings',
-    content: 'LlamaIndex chunks incoming documents into 512 tokens with 64 token overlap. Vectors are embedded using Gemini Embeddings (768 dimensions) and retrieved using HNSW cosine index.',
+    title: 'Vector Store & Dense Semantic Embeddings',
+    content: 'LlamaIndex chunks incoming documents into 512 tokens with 64 token overlap. Vectors are embedded into dense semantic representations and retrieved using HNSW cosine index.',
     category: 'RAG & Embeddings',
     chunksCount: 10,
     embeddingScore: 0.88,
@@ -404,7 +401,7 @@ export const VOICE_OPTIONS: VoiceOption[] = [
   { id: 'adam', name: 'Adam', provider: 'ElevenLabs', accent: 'American English', tone: 'Technical Architect Lead', gender: 'male' },
   { id: 'nicole', name: 'Nicole', provider: 'ElevenLabs', accent: 'British English', tone: 'Precise, Phonetic Specialist', gender: 'female' },
   { id: 'kyu', name: 'Kyu', provider: 'ElevenLabs', accent: 'Multilingual / Hinglish', tone: 'Empathetic Bilingual Coach', gender: 'female' },
-  { id: 'zephyr', name: 'Zephyr', provider: 'Gemini TTS', accent: 'Natural Neutral', tone: 'Calm & Intellectual', gender: 'male' }
+  { id: 'zephyr', name: 'Zephyr', provider: 'Neural TTS', accent: 'Natural Neutral', tone: 'Calm & Intellectual', gender: 'male' }
 ];
 
 export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
@@ -430,8 +427,8 @@ export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
 
 export const SAMPLE_PROMPTS = [
   "How does FastAPI handle asynchronous WebSockets compared to Django?",
-  "Explain how LangGraph manages cyclic state machines with checkpointers.",
-  "Why is Deepgram Nova-2 better than batched Whisper for conversational voice agents?",
-  "How do we evaluate RAG hallucination using DeepEval and LlamaIndex?",
+  "Explain how stateful workflows manage cyclic execution with checkpointers.",
+  "Why is streaming STT preferred for real-time conversational voice agents?",
+  "How do we evaluate RAG hallucination using automated evaluation metrics?",
   "Pronounce and drill: 'Asynchronous microservice orchestration with PostgreSQL'."
 ];

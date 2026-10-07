@@ -56,7 +56,7 @@ export interface RagDocument {
 export interface VoiceOption {
   id: string;
   name: string;
-  provider: 'ElevenLabs' | 'Gemini TTS';
+  provider: 'ElevenLabs' | 'Neural TTS';
   accent: string;
   tone: string;
   gender: 'female' | 'male';

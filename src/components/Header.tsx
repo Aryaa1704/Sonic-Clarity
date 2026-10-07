@@ -1,8 +1,8 @@
 import React from 'react';
-import { Mic, GitBranch, Activity, Database, Layers, Award, Sparkles, Radio, ShieldCheck, LogOut, User } from 'lucide-react';
+import { Mic, Rocket, Activity, Database, Layers, Award, Radio, ShieldCheck, LogOut, User } from 'lucide-react';
 import { AuthUser } from './AuthModal';
 
-export type ActiveTab = 'studio' | 'langgraph' | 'langfuse' | 'rag' | 'techstack' | 'quiz';
+export type ActiveTab = 'studio' | 'live_interview' | 'deploy' | 'langfuse' | 'rag' | 'techstack' | 'quiz';
 
 interface HeaderProps {
   activeTab: ActiveTab;
@@ -21,11 +21,12 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const tabs = [
     { id: 'studio', label: 'Voice Studio', icon: Mic },
-    { id: 'langgraph', label: 'LangGraph Agent', icon: GitBranch },
+    { id: 'live_interview', label: 'Live AI Interview', icon: Radio },
+    { id: 'deploy', label: 'Live Deploy Guide', icon: Rocket },
     { id: 'langfuse', label: 'Evaluation & Metrics', icon: Activity },
-    { id: 'rag', label: 'RAG Knowledge', icon: Database },
-    { id: 'techstack', label: 'Tech Stack (23)', icon: Layers },
-    { id: 'quiz', label: 'Assessment Quiz', icon: Award },
+    { id: 'rag', label: 'Knowledge Base', icon: Database },
+    { id: 'techstack', label: 'Architecture', icon: Layers },
+    { id: 'quiz', label: 'Role Assessment', icon: Award },
   ];
 
   return (
