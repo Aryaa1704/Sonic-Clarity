@@ -1,0 +1,6 @@
+{
+  "name": "Sonic Clarity - Voice AI Learning Platform",
+  "description": "Intelligent audio-first pedagogical environment powered by LangGraph, Gemini API, Deepgram STT, ElevenLabs TTS, and Langfuse observability.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
