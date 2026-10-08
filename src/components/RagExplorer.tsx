@@ -23,7 +23,7 @@ export const RagExplorer: React.FC<RagExplorerProps> = ({ onSelectContextForChat
       return;
     }
     setIsSearching(true);
-    // Simulate Gemini Embeddings + ChromaDB vector cosine distance calculation
+    // Simulate semantic vector embeddings + cosine distance calculation
     setTimeout(() => {
       const filtered = documents.map(doc => {
         const matchesQuery = doc.content.toLowerCase().includes(query.toLowerCase()) ||

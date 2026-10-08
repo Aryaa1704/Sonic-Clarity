@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Mail, Lock, User, ArrowRight, CheckCircle2, AlertCircle, KeyRound, X, Eye, EyeOff, Check, RefreshCw, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShieldCheck, Mail, Lock, User, ArrowRight, CheckCircle2, AlertCircle, X, Eye, EyeOff, Check, RefreshCw, ExternalLink, Globe, HelpCircle, KeyRound } from 'lucide-react';
 
 export interface AuthUser {
   email: string;
@@ -14,7 +14,7 @@ interface AuthModalProps {
   onAuthenticated: (user: AuthUser) => void;
 }
 
-type AuthStep = 'login' | 'signup' | 'verify_email' | 'google_oauth' | 'google_consent';
+type AuthStep = 'login' | 'signup' | 'verify_email' | 'google_setup_info';
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated }) => {
   const [step, setStep] = useState<AuthStep>('login');
@@ -23,15 +23,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [otpCode, setOtpCode] = useState('');
-  const [dispatchedCode, setDispatchedCode] = useState<string | null>(null);
+  const [testMailboxUrl, setTestMailboxUrl] = useState<string | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Google OAuth State
-  const [selectedGoogleAccount, setSelectedGoogleAccount] = useState<{ email: string; name: string } | null>(null);
-  const [googleCustomEmail, setGoogleCustomEmail] = useState('');
+  const googleBtnContainerRef = useRef<HTMLDivElement | null>(null);
+  const googleClientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
 
   // 60-second cooldown timer for resend
   useEffect(() => {
@@ -41,6 +41,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     }, 1000);
     return () => clearInterval(interval);
   }, [resendCooldown]);
+
+  // Google Identity Services (GSI) ONLY when a genuine Client ID is present
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+      try {
+        const googleObj = (window as any).google.accounts.id;
+        googleObj.initialize({
+          client_id: googleClientId,
+          callback: async (response: any) => {
+            if (response?.credential) {
+              await handleVerifyGoogleCredential(response.credential);
+            }
+          }
+        });
+
+        if (googleBtnContainerRef.current) {
+          googleObj.renderButton(googleBtnContainerRef.current, {
+            theme: 'outline',
+            size: 'large',
+            width: 320,
+            text: 'continue_with',
+            shape: 'rectangular'
+          });
+        }
+      } catch (err) {
+        console.warn('Google Identity initialization error:', err);
+      }
+    }
+  }, [googleClientId, step]);
 
   if (!isOpen) return null;
 
@@ -53,7 +84,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
 
   const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSpecialChar;
 
-  // 1. Handle Email Sign Up -> Sends Verification Code & Locks Platform
+  // 1. Handle Email Sign Up -> Creates account and sends 6-digit verification code
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -66,7 +97,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     }
 
     if (!isPasswordValid) {
-      setErrorMessage('Password must satisfy all 5 complexity requirements.');
+      setErrorMessage('Password must satisfy all 5 security complexity requirements.');
       return;
     }
 
@@ -84,8 +115,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
         throw new Error(data.error || 'Registration failed');
       }
 
-      setDispatchedCode(data.verificationCode || null);
-      setSuccessMessage(`A 6-digit verification code has been dispatched to ${cleanEmail}.`);
+      setTestMailboxUrl(data.previewUrl || null);
+      setDevCode(data.devCode || null);
+      setSuccessMessage(data.message || `A 6-digit confirmation code was dispatched to ${cleanEmail}.`);
       setResendCooldown(60);
       setOtpCode('');
       setStep('verify_email');
@@ -96,7 +128,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     }
   };
 
-  // 2. Handle 6-Digit Email Verification Code Confirmation
+  // 2. Handle 6-Digit Email Verification Confirmation
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -110,15 +142,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     setIsLoading(true);
 
     try {
+      const cleanEmail = email.trim().toLowerCase();
       const res = await fetch('/api/auth/verify-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), code: otpCode.trim() })
+        body: JSON.stringify({ email: cleanEmail, code: otpCode.trim() })
       });
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || 'Invalid verification code. Please check your email.');
+        throw new Error(data.error || 'Invalid verification code. Please check your code and try again.');
       }
 
       const verifiedUser: AuthUser = {
@@ -129,8 +162,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
         provider: 'email'
       };
 
+      // Save strictly to this browser session
       localStorage.setItem('sc_auth_session', JSON.stringify(verifiedUser));
-      setSuccessMessage('Email verified successfully! Entering platform...');
+      setSuccessMessage('Email verified successfully! Welcome to the interview platform.');
       setTimeout(() => {
         onAuthenticated(verifiedUser);
       }, 400);
@@ -141,7 +175,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     }
   };
 
-  // 3. Handle Email Login (Checks Verification Gate)
+  // 3. Handle Email Login (Checks credentials and verification state)
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -149,7 +183,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
 
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail) {
-      setErrorMessage('Email is required.');
+      setErrorMessage('Email address is required.');
       return;
     }
 
@@ -170,8 +204,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
 
       // If user is unverified, server rejects with 403 and requiresVerification
       if (res.status === 403 && data.requiresVerification) {
-        setDispatchedCode(data.verificationCode || null);
-        setErrorMessage(data.error || 'Please verify your email before accessing the app.');
+        setTestMailboxUrl(data.previewUrl || null);
+        setErrorMessage(data.error || 'Please verify your email address before accessing the platform.');
         setResendCooldown(60);
         setOtpCode('');
         setStep('verify_email');
@@ -190,8 +224,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
         provider: 'email'
       };
 
+      // Save strictly to this browser session
       localStorage.setItem('sc_auth_session', JSON.stringify(verifiedUser));
-      setSuccessMessage('Login successful! Entering interview platform...');
+      setSuccessMessage('Login successful! Entering platform...');
       setTimeout(() => {
         onAuthenticated(verifiedUser);
       }, 400);
@@ -220,8 +255,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
         throw new Error(data.error || 'Could not resend verification code');
       }
 
-      setDispatchedCode(data.verificationCode || null);
-      setSuccessMessage(`A fresh 6-digit verification code has been dispatched to ${email}.`);
+      setTestMailboxUrl(data.previewUrl || null);
+      setSuccessMessage(data.message || `A fresh 6-digit code has been dispatched to ${email}.`);
       setResendCooldown(60);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to resend code');
@@ -230,30 +265,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
     }
   };
 
-  // 5. Open Google OAuth Modal
-  const handleOpenGoogleOAuth = () => {
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    setStep('google_oauth');
-  };
-
-  // 6. When user selects Google account -> Open Google Permissions & Consent Screen
-  const handleSelectGoogleAccount = (targetEmail: string, targetName: string) => {
-    setSelectedGoogleAccount({ email: targetEmail, name: targetName });
-    setStep('google_consent');
-  };
-
-  // 7. When user explicitly clicks "Allow & Continue" on Google Consent Screen
-  const handleConfirmGoogleConsent = async () => {
-    if (!selectedGoogleAccount) return;
-    setErrorMessage(null);
+  // 5. Complete Google Auth when a real Google JWT is received
+  const handleVerifyGoogleCredential = async (credential: string) => {
     setIsLoading(true);
+    setErrorMessage(null);
 
     try {
       const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: selectedGoogleAccount.email, name: selectedGoogleAccount.name })
+        body: JSON.stringify({ credential })
       });
       const data = await res.json();
 
@@ -272,222 +293,92 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
       localStorage.setItem('sc_auth_session', JSON.stringify(verifiedUser));
       onAuthenticated(verifiedUser);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Google Auth service error');
+      setErrorMessage(err.message || 'Google Auth error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 6. When user clicks "Continue with Google"
+  const handleGoogleClick = () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (googleClientId) {
+      // If client ID is present, trigger Google prompt
+      if (typeof window !== 'undefined' && (window as any).google?.accounts?.id) {
+        (window as any).google.accounts.id.prompt();
+      }
+    } else {
+      // If client ID is not configured, show clear setup guide and direct to email login
+      setStep('google_setup_info');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-[#001428]/85 backdrop-blur-md flex items-center justify-center p-4">
       {/* ------------------------------------------------------------- */}
-      {/* STEP: GOOGLE PERMISSION & CONSENT SCREEN                      */}
+      {/* GOOGLE SETUP INFO MODAL (Explains why real Client ID is needed)*/}
       {/* ------------------------------------------------------------- */}
-      {step === 'google_consent' && selectedGoogleAccount && (
-        <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-[#e2e8f0] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          <div className="bg-[#f1f5f9] px-4 py-2.5 border-b border-[#e2e8f0] flex items-center gap-2 text-xs text-[#475569]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e]" />
-            </div>
-            <div className="flex-1 bg-white rounded-lg px-2.5 py-1 text-[11px] font-mono text-[#0f2942] border border-[#cbd5e1] truncate flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-[#16a34a] shrink-0" />
-              <span>https://accounts.google.com/signin/oauth/v2/consent?client_id=interview-coach.googleusercontent.com</span>
-            </div>
-            <button
-              onClick={() => setStep('google_oauth')}
-              className="p-1 text-[#64748b] hover:text-[#0f2942]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="p-6 sm:p-8 space-y-5">
-            <div className="text-center space-y-1">
-              <div className="w-10 h-10 mx-auto flex items-center justify-center">
-                <svg className="w-9 h-9" viewBox="0 0 24 24">
+      {step === 'google_setup_info' && (
+        <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#e2e8f0] overflow-hidden animate-in fade-in zoom-in-95 duration-150 space-y-5">
+          <div className="flex items-center justify-between border-b border-[#e2e8f0] pb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-[#f1f5f9] flex items-center justify-center">
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
                   <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-[#0f2942]">AI Voice Interview Coach wants access to your Google Account</h3>
-              <p className="text-xs text-[#64748b]">Select Allow to grant permissions and sign in</p>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#f8f9ff] border border-[#e2e8f0]">
-              <div className="w-10 h-10 rounded-full bg-[#2563eb] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                {selectedGoogleAccount.name ? selectedGoogleAccount.name[0].toUpperCase() : 'G'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold text-[#0f2942] truncate">{selectedGoogleAccount.name}</div>
-                <div className="text-[11px] text-[#64748b] truncate">{selectedGoogleAccount.email}</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setStep('google_oauth')}
-                className="text-[11px] font-semibold text-[#2563eb] hover:underline shrink-0"
-              >
-                Change
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              <span className="text-xs font-semibold text-[#0f2942]">
-                This will allow AI Voice Interview Coach to:
-              </span>
-
-              <div className="space-y-2 text-xs text-[#334155]">
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white border border-[#e2e8f0]">
-                  <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-[#0f2942]">See your primary Google Account email address</span>
-                    <p className="text-[11px] text-[#64748b]">{selectedGoogleAccount.email}</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white border border-[#e2e8f0]">
-                  <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-[#0f2942]">See your personal info</span>
-                    <p className="text-[11px] text-[#64748b]">Name and profile identifier associated with this account</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-white border border-[#e2e8f0]">
-                  <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-[#0f2942]">Associate your interview practice sessions</span>
-                    <p className="text-[11px] text-[#64748b]">Save your pronunciation drills and role assessments</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setStep('google_oauth')}
-                className="px-5 py-2.5 rounded-xl border border-[#cbd5e1] hover:bg-[#f1f5f9] text-[#475569] text-xs font-semibold transition-colors"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={handleConfirmGoogleConsent}
-                className="px-6 py-2.5 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold transition-colors flex items-center gap-2 shadow-xs disabled:opacity-50"
-              >
-                <span>{isLoading ? 'Authorizing Google...' : 'Allow & Continue'}</span>
-                <Check className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------- */}
-      {/* STEP: GOOGLE ACCOUNT CHOOSER                                  */}
-      {/* ------------------------------------------------------------- */}
-      {step === 'google_oauth' && (
-        <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-[#e2e8f0] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-          <div className="bg-[#f1f5f9] px-4 py-2.5 border-b border-[#e2e8f0] flex items-center gap-2 text-xs text-[#475569]">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#eab308]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e]" />
-            </div>
-            <div className="flex-1 bg-white rounded-lg px-2.5 py-1 text-[11px] font-mono text-[#0f2942] border border-[#cbd5e1] truncate flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-[#16a34a] shrink-0" />
-              <span>https://accounts.google.com/o/oauth2/v2/auth?client_id=interview-coach.googleusercontent.com</span>
+              <h3 className="text-base font-bold text-[#0f2942]">Google OAuth Setup</h3>
             </div>
             <button
               onClick={() => setStep('login')}
-              className="p-1 text-[#64748b] hover:text-[#0f2942]"
+              className="p-1 text-[#64748b] hover:text-[#0f2942] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="p-6 sm:p-8 space-y-5">
-            <div className="text-center space-y-1.5">
-              <div className="w-10 h-10 mx-auto flex items-center justify-center">
-                <svg className="w-9 h-9" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold text-[#0f2942]">Choose an account</h3>
-              <p className="text-xs text-[#64748b]">
-                to sign in to <span className="font-semibold text-[#2563eb]">AI Voice Interview Coach</span>
+          <div className="space-y-3 text-xs text-[#334155]">
+            <div className="p-3.5 rounded-2xl bg-[#eff6ff] border border-[#bfdbfe] space-y-1.5">
+              <span className="font-bold text-[#1e40af] flex items-center gap-1.5">
+                <HelpCircle className="w-4 h-4" />
+                <span>Google Client ID kyu chahiye?</span>
+              </span>
+              <p className="text-[11px] text-[#3b82f6] leading-relaxed">
+                Google ke official servers (<code>accounts.google.com</code>) sirf tab login allow karte hain jab aapke Google Cloud Project se bana hua valid Client ID ho. Dummy Client ID dalne par Google <strong>&quot;Error 401: invalid_client&quot;</strong> dikhata hai.
               </p>
             </div>
 
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-[#fef2f2] border border-[#fecaca] text-[#991b1b] text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0 mt-0.5" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <div className="border border-[#e2e8f0] rounded-2xl p-2 bg-[#f8f9ff]">
-              <button
-                type="button"
-                onClick={() => handleSelectGoogleAccount('aryansharma009009@gmail.com', 'Aryan Sharma')}
-                className="w-full p-3 rounded-xl bg-white hover:bg-[#eff4ff] border border-[#e2e8f0] flex items-center justify-between text-left transition-colors group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#2563eb] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                    A
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-[#0f2942]">Aryan Sharma</div>
-                    <div className="text-[11px] text-[#64748b]">aryansharma009009@gmail.com</div>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-[#94a3b8] group-hover:text-[#2563eb] transition-colors" />
-              </button>
+            <div className="space-y-1.5">
+              <span className="font-bold text-[#0f2942]">Google Sign-In activate karne ke 3 steps:</span>
+              <ol className="list-decimal pl-4 space-y-1 text-[11px] text-[#64748b]">
+                <li><strong>console.cloud.google.com</strong> par jaakar naya project banayein.</li>
+                <li><strong>APIs & Services &rarr; Credentials</strong> me <strong>OAuth 2.0 Client ID</strong> (Web application) create karein.</li>
+                <li>Milne wali Client ID ko <code>VITE_GOOGLE_CLIENT_ID</code> me set karein.</li>
+              </ol>
             </div>
 
-            <div className="pt-2">
-              <label className="block text-xs font-semibold text-[#0f2942] mb-1">
-                Use another Google Account:
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={googleCustomEmail}
-                  onChange={(e) => setGoogleCustomEmail(e.target.value)}
-                  placeholder="your.email@gmail.com"
-                  className="flex-1 text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl px-3 py-2 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={!googleCustomEmail.includes('@')}
-                  onClick={() => handleSelectGoogleAccount(googleCustomEmail.trim(), googleCustomEmail.split('@')[0])}
-                  className="px-4 py-2 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                >
-                  Next
-                </button>
-              </div>
+            <div className="p-3 rounded-2xl bg-[#f8f9ff] border border-[#e2e8f0] text-[11px] text-[#475569]">
+              <strong className="text-[#0f2942]">Abhi Bina Setup ke Access Karein:</strong>
+              <p className="mt-0.5">
+                Aapko Google Cloud setup karne ki zaroorat nahi hai! Aap niche <strong>Email & Password</strong> se turant Sign Up / Sign In karke app ko 100% securely access kar sakte hain.
+              </p>
             </div>
+          </div>
 
-            <div className="text-[11px] text-[#64748b] text-center pt-2 border-t border-[#e2e8f0] flex items-center justify-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-[#16a34a]" />
-              <span>Protected by Google OAuth 2.0 Security Protocols</span>
-            </div>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setStep('login')}
+              className="w-full py-2.5 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-xs"
+            >
+              <span>Email & Password Se Login Karein</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -495,7 +386,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
       {/* ------------------------------------------------------------- */}
       {/* PRIMARY AUTH CARD (Login, Signup, Verify Email)               */}
       {/* ------------------------------------------------------------- */}
-      {step !== 'google_oauth' && step !== 'google_consent' && (
+      {step !== 'google_setup_info' && (
         <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-[#e2e8f0] relative animate-in fade-in zoom-in-95 duration-200">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-2xl bg-[#0f2942] text-white flex items-center justify-center mx-auto mb-3 shadow-lg">
@@ -533,7 +424,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="aryansharma009009@gmail.com"
+                    placeholder="name@example.com"
                     className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-3 py-2.5 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
                   />
                 </div>
@@ -575,13 +466,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                   <div className="w-full border-t border-[#e2e8f0]" />
                 </div>
                 <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-2 text-[#94a3b8]">or continue with</span>
+                  <span className="bg-white px-2 text-[#94a3b8]">or</span>
                 </div>
               </div>
 
+              {/* If Google Client ID is configured, render official GSI button, else show Google setup info */}
               <button
                 type="button"
-                onClick={handleOpenGoogleOAuth}
+                onClick={handleGoogleClick}
                 disabled={isLoading}
                 className="w-full py-2.5 rounded-xl bg-white border border-[#e2e8f0] hover:bg-[#f8f9ff] text-xs font-semibold text-[#0f2942] flex items-center justify-center gap-2.5 transition-colors shadow-2xs"
               >
@@ -605,7 +497,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                   }}
                   className="text-[#2563eb] font-semibold hover:underline"
                 >
-                  Create Account
+                  Create an Account
                 </button>
               </div>
             </form>
@@ -623,8 +515,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Aryan Sharma"
-                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-3 py-2.5 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
+                    placeholder="Candidate Name"
+                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-3 py-2 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
                   />
                 </div>
               </div>
@@ -638,8 +530,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="aryansharma009009@gmail.com"
-                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-3 py-2.5 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
+                    placeholder="name@example.com"
+                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-3 py-2 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
                   />
                 </div>
               </div>
@@ -655,8 +547,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="e.g. Master@2026"
-                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-9 py-2.5 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
+                    placeholder="Create secure password"
+                    className="w-full text-xs bg-[#f8f9ff] border border-[#e2e8f0] rounded-xl pl-9 pr-9 py-2 text-[#0f2942] focus:ring-2 focus:ring-[#2563eb] outline-none"
                   />
                   <button
                     type="button"
@@ -666,65 +558,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+              </div>
 
-                <div className="mt-2.5 p-3 rounded-xl bg-[#f8f9ff] border border-[#e2e8f0] space-y-1.5 text-[11px]">
-                  <div className="font-semibold text-[#0f2942] text-[11px] mb-1 flex items-center justify-between">
-                    <span>Password Complexity Requirements:</span>
-                    <span className={isPasswordValid ? 'text-[#059669] font-bold' : 'text-[#d97706]'}>
-                      {isPasswordValid ? 'All Met ✓' : 'Incomplete'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-[#059669] font-medium' : 'text-[#64748b]'}`}>
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasMinLength ? 'bg-[#10b981] text-white' : 'bg-[#cbd5e1] text-[#475569]'}`}>
-                        ✓
-                      </span>
+              {/* Password Complexity Checklist */}
+              {password.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-[#f8f9ff] border border-[#e2e8f0] space-y-1 text-[11px]">
+                  <span className="font-semibold text-[#0f2942] block">Password Security Requirements:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[#64748b]">
+                    <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-[#16a34a] font-semibold' : ''}`}>
+                      <Check className={`w-3.5 h-3.5 ${hasMinLength ? 'text-[#16a34a]' : 'text-[#cbd5e1]'}`} />
                       <span>8+ Characters</span>
                     </div>
-
-                    <div className={`flex items-center gap-1.5 ${hasUppercase ? 'text-[#059669] font-medium' : 'text-[#64748b]'}`}>
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasUppercase ? 'bg-[#10b981] text-white' : 'bg-[#cbd5e1] text-[#475569]'}`}>
-                        ✓
-                      </span>
+                    <div className={`flex items-center gap-1.5 ${hasUppercase ? 'text-[#16a34a] font-semibold' : ''}`}>
+                      <Check className={`w-3.5 h-3.5 ${hasUppercase ? 'text-[#16a34a]' : 'text-[#cbd5e1]'}`} />
                       <span>Uppercase (A-Z)</span>
                     </div>
-
-                    <div className={`flex items-center gap-1.5 ${hasLowercase ? 'text-[#059669] font-medium' : 'text-[#64748b]'}`}>
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasLowercase ? 'bg-[#10b981] text-white' : 'bg-[#cbd5e1] text-[#475569]'}`}>
-                        ✓
-                      </span>
+                    <div className={`flex items-center gap-1.5 ${hasLowercase ? 'text-[#16a34a] font-semibold' : ''}`}>
+                      <Check className={`w-3.5 h-3.5 ${hasLowercase ? 'text-[#16a34a]' : 'text-[#cbd5e1]'}`} />
                       <span>Lowercase (a-z)</span>
                     </div>
-
-                    <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-[#059669] font-medium' : 'text-[#64748b]'}`}>
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasNumber ? 'bg-[#10b981] text-white' : 'bg-[#cbd5e1] text-[#475569]'}`}>
-                        ✓
-                      </span>
-                      <span>Number / Digit (0-9)</span>
+                    <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-[#16a34a] font-semibold' : ''}`}>
+                      <Check className={`w-3.5 h-3.5 ${hasNumber ? 'text-[#16a34a]' : 'text-[#cbd5e1]'}`} />
+                      <span>Number (0-9)</span>
                     </div>
-
-                    <div className={`col-span-2 flex items-center gap-1.5 ${hasSpecialChar ? 'text-[#059669] font-medium' : 'text-[#64748b]'}`}>
-                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${hasSpecialChar ? 'bg-[#10b981] text-white' : 'bg-[#cbd5e1] text-[#475569]'}`}>
-                        ✓
-                      </span>
+                    <div className={`flex items-center gap-1.5 sm:col-span-2 ${hasSpecialChar ? 'text-[#16a34a] font-semibold' : ''}`}>
+                      <Check className={`w-3.5 h-3.5 ${hasSpecialChar ? 'text-[#16a34a]' : 'text-[#cbd5e1]'}`} />
                       <span>Special Symbol (!@#$%^&* etc.)</span>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
                 disabled={isLoading || !isPasswordValid}
                 className="w-full py-2.5 rounded-xl bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
               >
-                <span>{isLoading ? 'Creating Account...' : 'Sign Up & Send Verification Code'}</span>
+                <span>{isLoading ? 'Creating Account...' : 'Sign Up & Verify Email'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
               <div className="text-center pt-1 text-xs text-[#64748b]">
-                Already registered?{' '}
+                Already have an account?{' '}
                 <button
                   type="button"
                   onClick={() => {
@@ -740,46 +615,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
             </form>
           )}
 
-          {/* STEP 3: Mandatory Email Verification Screen */}
+          {/* STEP 3: Verify Email Code Form */}
           {step === 'verify_email' && (
             <form onSubmit={handleVerifyEmail} className="space-y-4">
-              <div className="p-3.5 rounded-2xl bg-[#eff4ff] border border-[#bfdbfe] text-xs text-[#1e40af] space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-[#1e3a8a]">
-                  <Mail className="w-4 h-4 text-[#2563eb]" />
-                  <span>Mandatory Email Verification Gate</span>
+              <div className="text-center space-y-1">
+                <div className="w-10 h-10 rounded-full bg-[#eff4ff] text-[#2563eb] flex items-center justify-center mx-auto">
+                  <Mail className="w-5 h-5" />
                 </div>
-                <p className="text-[11px] text-[#3b82f6]">
-                  A secure 6-digit confirmation code was dispatched to:
-                  <br />
-                  <strong className="text-[#0f2942] font-mono text-xs">{email}</strong>
+                <p className="text-xs text-[#0f2942] font-semibold">
+                  A 6-digit verification code was dispatched to:
                 </p>
-                <p className="text-[10px] text-[#64748b]">
-                  Platform access remains locked until you verify ownership of this email address.
+                <div className="text-xs font-mono font-bold text-[#2563eb] bg-[#f8f9ff] py-1 px-3 rounded-lg inline-block border border-[#e2e8f0]">
+                  {email}
+                </div>
+                <p className="text-[11px] text-[#64748b]">
+                  Please enter the 6-digit confirmation code below to activate your account.
                 </p>
               </div>
 
-              {/* Secure Dispatch Preview Banner for instant dev/preview verification */}
-              {dispatchedCode && (
-                <div className="p-3 rounded-2xl bg-[#f0fdf4] border border-[#bbf7d0] text-xs text-[#166534] flex items-center justify-between gap-2 animate-in fade-in">
-                  <div className="flex items-center gap-2">
-                    <KeyRound className="w-4 h-4 text-[#16a34a] shrink-0" />
-                    <span>
-                      Dispatched Code: <strong className="font-mono text-sm tracking-widest text-[#0f2942] bg-white px-2 py-0.5 rounded-lg border border-[#bbf7d0]">{dispatchedCode}</strong>
-                    </span>
+              {/* Live Test Mailbox Link (If Ethereal or test mailer is active) */}
+              {testMailboxUrl && (
+                <div className="p-3 rounded-2xl bg-[#eff6ff] border border-[#bfdbfe] text-xs text-[#1e40af] space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center gap-1.5 font-semibold">
+                    <Globe className="w-4 h-4 text-[#2563eb] shrink-0" />
+                    <span>Live Test Mailbox Dispatched</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setOtpCode(dispatchedCode)}
-                    className="text-xs font-bold text-[#16a34a] hover:underline shrink-0"
+                  <p className="text-[11px] text-[#3b82f6]">
+                    Email has been delivered to a live test mailbox. Click below to view the delivered email and 6-digit code:
+                  </p>
+                  <a
+                    href={testMailboxUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#2563eb] text-white text-xs font-semibold hover:bg-[#1d4ed8] transition-colors"
                   >
-                    Fill Code
-                  </button>
+                    <span>📬 Open Delivered Email in Mailbox</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 </div>
               )}
 
               <div>
                 <label className="block text-xs font-semibold text-[#0f2942] mb-1">
-                  Enter 6-Digit Verification Code
+                  Enter 6-Digit Code
                 </label>
                 <input
                   type="text"
@@ -810,7 +688,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onAuthenticated })
                 disabled={isLoading || otpCode.length < 6}
                 className="w-full py-2.5 rounded-xl bg-[#16a34a] hover:bg-[#15803d] text-white text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
               >
-                <span>{isLoading ? 'Verifying Code...' : 'Verify Email & Unlock Platform'}</span>
+                <span>{isLoading ? 'Verifying...' : 'Verify Email & Enter Platform'}</span>
                 <CheckCircle2 className="w-4 h-4" />
               </button>
 

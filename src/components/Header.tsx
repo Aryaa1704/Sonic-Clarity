@@ -1,6 +1,5 @@
 import React from 'react';
-import { Mic, Rocket, Activity, Database, Layers, Award, Radio, ShieldCheck, LogOut, User } from 'lucide-react';
-import { AuthUser } from './AuthModal';
+import { Mic, Rocket, Activity, Database, Layers, Award, Radio } from 'lucide-react';
 
 export type ActiveTab = 'studio' | 'live_interview' | 'deploy' | 'langfuse' | 'rag' | 'techstack' | 'quiz';
 
@@ -8,16 +7,14 @@ interface HeaderProps {
   activeTab: ActiveTab;
   onChangeTab: (tab: ActiveTab) => void;
   language: string;
-  currentUser?: AuthUser | null;
-  onLogout?: () => void;
+  candidateName?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onChangeTab,
   language,
-  currentUser,
-  onLogout
+  candidateName = 'Candidate'
 }) => {
   const tabs = [
     { id: 'studio', label: 'Voice Studio', icon: Mic },
@@ -57,40 +54,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* User Profile & 2FA Status */}
+          {/* Active Candidate Session Badge */}
           <div className="flex items-center gap-2.5">
-            {currentUser ? (
-              <div className="flex items-center gap-2">
-                <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ecfdf5] border border-[#a7f3d0] text-[#065f46] text-xs font-semibold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#059669]" />
-                  <span>2FA Verified</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#e2e8f0] text-xs shadow-2xs">
-                  <div className="w-5 h-5 rounded-full bg-[#0f2942] text-white flex items-center justify-center text-[10px] font-bold">
-                    {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
-                  </div>
-                  <span className="font-semibold text-[#0f2942] hidden sm:inline max-w-[120px] truncate">
-                    {currentUser.name || currentUser.email.split('@')[0]}
-                  </span>
-                </div>
-
-                {onLogout && (
-                  <button
-                    onClick={onLogout}
-                    className="p-1.5 rounded-xl border border-[#e2e8f0] bg-white hover:bg-[#fee2e2] hover:text-[#dc2626] text-[#64748b] transition-colors"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                )}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#e2e8f0] text-xs shadow-2xs">
+              <div className="w-5 h-5 rounded-full bg-[#0f2942] text-white flex items-center justify-center text-[10px] font-bold">
+                {candidateName ? candidateName[0].toUpperCase() : 'C'}
               </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eff4ff] border border-[#bfdbfe] text-[#2563eb] text-xs font-semibold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Protected Access</span>
-              </div>
-            )}
+              <span className="font-semibold text-[#0f2942] hidden sm:inline">
+                {candidateName}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ecfdf5] border border-[#a7f3d0] text-[#065f46] text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+              <span>Full Access</span>
+            </div>
           </div>
         </div>
 

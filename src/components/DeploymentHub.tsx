@@ -352,10 +352,22 @@ export const DeploymentHub: React.FC = () => {
                 <p className="text-[#64748b]">
                   Vercel setup screen me <strong>Environment Variables</strong> section expand karein:
                 </p>
-                <div className="bg-white p-3 rounded-xl border border-[#e2e8f0] font-mono text-[11px] space-y-1">
+                <div className="bg-white p-3 rounded-xl border border-[#e2e8f0] font-mono text-[11px] space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span><strong>GEMINI_API_KEY</strong> = your_api_key_here</span>
                     <span className="text-[#16a34a] font-semibold text-[10px]">Required</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#475569]">
+                    <span><strong>SMTP_USER</strong> = your.email@gmail.com</span>
+                    <span className="text-[#3b82f6] font-semibold text-[10px]">Optional (Live Email Inbox)</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#475569]">
+                    <span><strong>SMTP_PASS</strong> = 16_digit_app_password</span>
+                    <span className="text-[#3b82f6] font-semibold text-[10px]">Optional (Gmail App Password)</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#475569]">
+                    <span><strong>VITE_GOOGLE_CLIENT_ID</strong> = your_client_id.apps.googleusercontent.com</span>
+                    <span className="text-[#3b82f6] font-semibold text-[10px]">Optional (Google OAuth)</span>
                   </div>
                 </div>
               </div>

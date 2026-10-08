@@ -10,7 +10,6 @@ import { RagExplorer } from './components/RagExplorer';
 import { TechStackMatrix } from './components/TechStackMatrix';
 import { QuizView } from './components/QuizView';
 import { LiveInterviewRoom } from './components/LiveInterviewRoom';
-import { AuthModal, AuthUser } from './components/AuthModal';
 import { ChatMessage, LearningMode, PhoneticWord } from './types';
 import { INITIAL_CHAT_MESSAGES, SAMPLE_PROMPTS } from './data/mockData';
 import { speechHandler } from './utils/speech';
@@ -27,16 +26,7 @@ const COMMON_ROLES = [
 ];
 
 export default function App() {
-  // Authentication & Persistent User Session
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
-    try {
-      const saved = localStorage.getItem('sc_auth_session') || localStorage.getItem('sonic_clarity_auth_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
+  const [candidateName] = useState<string>('Candidate');
   const [activeTab, setActiveTab] = useState<ActiveTab>('studio');
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
   const [inputText, setInputText] = useState('');
@@ -90,30 +80,6 @@ export default function App() {
 
   const activeRoleName = customRoleInput.trim() || targetRole;
 
-  // Verify Persistent Session with backend on mount
-  useEffect(() => {
-    if (currentUser?.token) {
-      fetch('/api/auth/validate-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: currentUser.email,
-          sessionToken: currentUser.token
-        })
-      })
-        .then((res) => {
-          if (!res.ok) {
-            localStorage.removeItem('sc_auth_session');
-            localStorage.removeItem('sonic_clarity_auth_user');
-            setCurrentUser(null);
-          }
-        })
-        .catch(() => {
-          // If transient network issue, keep session intact
-        });
-    }
-  }, []);
-
   // Auto scroll transcript when new messages arrive
   useEffect(() => {
     if (activeTab === 'studio') {
@@ -127,15 +93,6 @@ export default function App() {
       setLiveVolume(vol);
     });
   }, []);
-
-  // Logout handler
-  const handleLogout = () => {
-    speechHandler.stopSpeaking();
-    speechHandler.stopListening();
-    localStorage.removeItem('sc_auth_session');
-    localStorage.removeItem('sonic_clarity_auth_user');
-    setCurrentUser(null);
-  };
 
   // Play audio response
   const playMessageAudio = async (msg: ChatMessage) => {
@@ -407,21 +364,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0b1c30] flex flex-col font-sans">
-      {/* Mandatory Authentication Wall: User cannot use app without logging in */}
-      <AuthModal
-        isOpen={!currentUser}
-        onAuthenticated={(user) => {
-          setCurrentUser(user);
-        }}
-      />
-
       {/* Top Navigation Header */}
       <Header
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         language={language}
-        currentUser={currentUser}
-        onLogout={handleLogout}
+        candidateName={candidateName}
       />
 
       {/* Main Container */}

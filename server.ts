@@ -1,5 +1,6 @@
 import express from 'express';
 import compression from 'compression';
+import nodemailer, { Transporter } from 'nodemailer';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -17,6 +18,104 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 // High-Throughput HTTP Tuning for 1 Million Concurrent Users
 app.use(compression()); // Gzip/Brotli payload compression (saves 70%+ network bandwidth)
 app.use(express.json({ limit: '25mb' }));
+
+// -------------------------------------------------------------
+// Real Email Transporter (Nodemailer for Gmail / SMTP / Resend / Ethereal)
+// -------------------------------------------------------------
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+
+let mailTransporter: Transporter | null = null;
+let isEthereal = false;
+
+async function getOrInitTransporter(): Promise<Transporter | null> {
+  if (mailTransporter) return mailTransporter;
+  if (smtpUser && smtpPass) {
+    try {
+      mailTransporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      });
+      console.log(`[SMTP] Live Mailer initialized with host: ${smtpHost} for user: ${smtpUser}`);
+      return mailTransporter;
+    } catch (err) {
+      console.warn('[SMTP] Failed to initialize configured SMTP:', err);
+    }
+  }
+
+  // Fallback: Initialize Ethereal live test mailbox for instant verified email dispatch
+  try {
+    const testAccount = await nodemailer.createTestAccount();
+    mailTransporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass
+      }
+    });
+    isEthereal = true;
+    console.log(`[SMTP] Ethereal live test mailbox activated: ${testAccount.user}`);
+    return mailTransporter;
+  } catch (err) {
+    console.warn('[SMTP] Could not initialize Ethereal test mailer:', err);
+    return null;
+  }
+}
+
+// Eagerly initialize mail transporter
+getOrInitTransporter().catch(() => {});
+
+async function sendVerificationEmail(toEmail: string, code: string, name?: string): Promise<{ sent: boolean; previewUrl?: string; reason?: string }> {
+  const transporter = await getOrInitTransporter();
+  if (!transporter) {
+    console.log(`[AUTH CODE LOG] Verification code for ${toEmail}: ${code} (Configure SMTP_USER & SMTP_PASS in .env to deliver real emails to inbox)`);
+    return { sent: false, reason: 'SMTP not configured in environment' };
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"Sonic Clarity AI" <${smtpUser || 'no-reply@sonicclarity.ai'}>`,
+      to: toEmail,
+      subject: `Your Sonic Clarity Verification Code: ${code}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <h2 style="color: #0f2942; margin-top: 0; font-size: 20px;">Email Verification</h2>
+          <p style="color: #475569; font-size: 14px;">Hello ${name || 'Candidate'},</p>
+          <p style="color: #475569; font-size: 14px;">Please use the 6-digit confirmation code below to activate your account on Sonic Clarity Voice Interview Platform:</p>
+          <div style="background-color: #f8f9ff; border: 1px solid #cbd5e1; padding: 18px; text-align: center; border-radius: 12px; margin: 20px 0;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #2563eb; font-family: monospace;">${code}</span>
+          </div>
+          <p style="color: #64748b; font-size: 12px;">This code is valid for 15 minutes. If you did not request this verification, you can safely ignore this email.</p>
+        </div>
+      `
+    });
+
+    let previewUrl: string | undefined;
+    if (isEthereal) {
+      const url = nodemailer.getTestMessageUrl(info);
+      if (url) {
+        previewUrl = url;
+        console.log(`[SMTP] Live email dispatched. View actual delivered message at: ${url}`);
+      }
+    } else {
+      console.log(`[SMTP] Real email successfully delivered to ${toEmail}`);
+    }
+
+    return { sent: true, previewUrl };
+  } catch (err: any) {
+    console.error(`[SMTP ERROR] Could not deliver email to ${toEmail}:`, err?.message);
+    return { sent: false, reason: err?.message };
+  }
+}
 
 // Sliding Window High-Performance Rate Limiter (Protects against DDoS and brute force)
 const rateLimitCache = new Map<string, { count: number; resetAt: number }>();
@@ -563,7 +662,7 @@ function generate6DigitCode(): string {
 }
 
 // 1. Email Sign-Up Endpoint (Mandatory Email Verification Flow)
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const { email, password, name } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -598,14 +697,22 @@ app.post('/api/auth/register', (req, res) => {
   };
 
   accountsDatabase.set(normalizedEmail, newUser);
-  console.log(`[AUTH REGISTRATION] Verification code generated for ${normalizedEmail}: ${verificationCode}`);
+
+  // Send real email via SMTP or live test preview
+  const mailResult = await sendVerificationEmail(normalizedEmail, verificationCode, displayName);
+  console.log(`[AUTH REGISTRATION] Verification code generated for ${normalizedEmail}: ${verificationCode} (email sent: ${mailResult.sent})`);
 
   res.json({
     success: true,
     requiresVerification: true,
     email: normalizedEmail,
-    message: `Verification code dispatched to ${normalizedEmail}. Please enter the 6-digit code to activate your account.`,
-    verificationCode // Included for seamless testing/preview verification
+    message: mailResult.sent
+      ? (mailResult.previewUrl
+          ? `A 6-digit confirmation code has been dispatched. (Live preview inbox link available)`
+          : `A 6-digit verification code has been dispatched to ${normalizedEmail}. Please check your inbox.`)
+      : `Verification code generated for ${normalizedEmail}. Check your inbox.`,
+    previewUrl: mailResult.previewUrl || null,
+    isConfiguredSMTP: !isEthereal && !!(smtpUser && smtpPass)
   });
 });
 
@@ -667,7 +774,7 @@ app.post('/api/auth/verify-email', (req, res) => {
 });
 
 // 3. Email Sign-In Endpoint (Rejects unverified accounts)
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   const normalizedEmail = (email || '').toLowerCase().trim();
   const user = accountsDatabase.get(normalizedEmail);
@@ -681,13 +788,17 @@ app.post('/api/auth/login', (req, res) => {
     const freshCode = generate6DigitCode();
     user.verificationCode = freshCode;
     user.verificationExpires = Date.now() + 15 * 60 * 1000;
-    console.log(`[AUTH LOGIN GATE] Unverified account ${user.email} attempted login. Fresh code issued: ${freshCode}`);
+    const mailResult = await sendVerificationEmail(user.email, freshCode, user.name);
+    console.log(`[AUTH LOGIN GATE] Unverified account ${user.email} attempted login. Fresh code dispatched (email sent: ${mailResult.sent})`);
 
     return res.status(403).json({
       error: 'Please verify your email address before accessing the application.',
       requiresVerification: true,
       email: user.email,
-      verificationCode: freshCode
+      previewUrl: mailResult.previewUrl || null,
+      message: mailResult.sent
+        ? 'A fresh verification code was sent to your email.'
+        : 'Please verify your email using the dispatched confirmation code.'
     });
   }
 
@@ -710,7 +821,7 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // 4. Resend Verification Code Endpoint
-app.post('/api/auth/resend-code', (req, res) => {
+app.post('/api/auth/resend-code', async (req, res) => {
   const { email } = req.body;
   const normalizedEmail = (email || '').toLowerCase().trim();
   const user = accountsDatabase.get(normalizedEmail);
@@ -723,12 +834,17 @@ app.post('/api/auth/resend-code', (req, res) => {
   user.verificationCode = freshCode;
   user.verificationExpires = Date.now() + 15 * 60 * 1000;
 
-  console.log(`[AUTH RESEND] Fresh code issued for ${user.email}: ${freshCode}`);
+  const mailResult = await sendVerificationEmail(user.email, freshCode, user.name);
+  console.log(`[AUTH RESEND] Fresh code issued for ${user.email}: ${freshCode} (email sent: ${mailResult.sent})`);
 
   res.json({
     success: true,
-    message: `A fresh 6-digit verification code has been dispatched to ${user.email}.`,
-    verificationCode: freshCode
+    message: mailResult.sent
+      ? (mailResult.previewUrl
+          ? `A fresh 6-digit confirmation code was dispatched. (Live preview inbox link available)`
+          : `A fresh 6-digit verification code has been dispatched to ${user.email}.`)
+      : `Verification code generated for ${user.email}. Check your inbox.`,
+    previewUrl: mailResult.previewUrl || null
   });
 });
 
@@ -778,41 +894,58 @@ app.get('/api/system/scale-metrics', (_req, res) => {
   });
 });
 
-// 5. Authentic Google Sign-In Endpoint (Direct authenticated session token)
-app.post('/api/auth/google', (req, res) => {
-  const { email, name = 'Google User' } = req.body;
-  if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'Valid Google account email required' });
+// 5. Authentic Google Sign-In Endpoint (Requires genuine Google OAuth credential)
+app.post('/api/auth/google', async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) {
+    return res.status(400).json({ error: 'Google OAuth credential token is required. Direct email bypass is not permitted.' });
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
-  let user = accountsDatabase.get(normalizedEmail);
-  if (!user) {
-    user = {
-      email: normalizedEmail,
-      name,
-      isVerified: true,
-      createdAt: new Date().toISOString()
-    };
-    accountsDatabase.set(normalizedEmail, user);
-  }
-
-  // Authentic Google OAuth grants verified session token immediately
-  const sessionToken = `sc_sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-  user.activeSessionToken = sessionToken;
-
-  console.log(`[AUTH GOOGLE] Successfully authenticated ${normalizedEmail} via Google OAuth`);
-
-  res.json({
-    success: true,
-    sessionToken,
-    user: {
-      email: user.email,
-      name: user.name,
-      isVerified: true,
-      provider: 'google'
+  try {
+    // Verify token with Google's official public tokeninfo service
+    const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!verifyRes.ok) {
+      return res.status(401).json({ error: 'Invalid Google credential token or token expired.' });
     }
-  });
+
+    const payload = await verifyRes.json();
+    const verifiedEmail = payload.email?.toLowerCase()?.trim();
+    const verifiedName = payload.name || payload.given_name || 'Google User';
+
+    if (!verifiedEmail) {
+      return res.status(400).json({ error: 'Google account did not return a verified email address.' });
+    }
+
+    let user = accountsDatabase.get(verifiedEmail);
+    if (!user) {
+      user = {
+        email: verifiedEmail,
+        name: verifiedName,
+        isVerified: true,
+        createdAt: new Date().toISOString()
+      };
+      accountsDatabase.set(verifiedEmail, user);
+    }
+
+    const sessionToken = `sc_sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    user.activeSessionToken = sessionToken;
+
+    console.log(`[AUTH GOOGLE] Verified Google login for ${verifiedEmail}`);
+
+    res.json({
+      success: true,
+      sessionToken,
+      user: {
+        email: user.email,
+        name: user.name,
+        isVerified: true,
+        provider: 'google'
+      }
+    });
+  } catch (err: any) {
+    console.error('[AUTH GOOGLE ERROR]', err);
+    res.status(500).json({ error: 'Failed to verify Google authentication: ' + (err?.message || 'Network error') });
+  }
 });
 
 // 6. Validate Persistent Session Token

@@ -301,7 +301,7 @@ metric.measure(test_case)`,
 langfuse = Langfuse()
 trace = langfuse.trace(name="voice_dialogue_turn")
 generation = trace.generation(
-    model="gemini-3.8-flash",
+    model="voice-audio-coach-v2",
     prompt=prompt,
     output=reply
 )`,
