@@ -1,7 +1,19 @@
 {
-  "name": "react-example",
+  "name": "sonic-clarity",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Voice AI Interview Preparation Platform powered by Google Gemini",
+  "keywords": ["voice-ai", "interview-prep", "speech-recognition", "gemini-ai", "react", "typescript"],
+  "author": "Aryan Sharma <aryansharma009009@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/Aryaa1704/Sonic-Clarity#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aryaa1704/Sonic-Clarity.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aryaa1704/Sonic-Clarity/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
